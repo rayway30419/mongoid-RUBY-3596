@@ -1,0 +1,31 @@
+$ORIGIN test.local.
+$TTL 60
+
+@   IN SOA ns.test.local. admin.test.local. (
+        2025121601 7200 3600 1209600 60
+    )
+    IN NS  ns.test.local.
+
+ns  IN A   172.28.0.53
+
+cfg1   IN A 172.28.0.21
+cfg2   IN A 172.28.0.22
+cfg3   IN A 172.28.0.23
+
+sh1a   IN A 172.28.0.31
+sh1b   IN A 172.28.0.32
+sh1c   IN A 172.28.0.33
+
+mongos1 IN A 172.28.0.41
+mongos2 IN A 172.28.0.42
+mongos3 IN A 172.28.0.43
+mongos4 IN A 172.28.0.44
+mongos5 IN A 172.28.0.45
+
+; SRV for mongodb+srv://mongo.test.local
+; In zone test.local, owner "mongo" == FQDN mongo.test.local.
+_mongodb._tcp.mongo IN SRV 0 0 27017 mongos1.test.local.
+_mongodb._tcp.mongo IN SRV 0 0 27017 mongos2.test.local.
+_mongodb._tcp.mongo IN SRV 0 0 27017 mongos3.test.local.
+_mongodb._tcp.mongo IN SRV 0 0 27017 mongos4.test.local.
+_mongodb._tcp.mongo IN SRV 0 0 27017 mongos5.test.local.

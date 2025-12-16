@@ -1,0 +1,301 @@
+services:
+  coredns:
+    image: coredns/coredns:1.11.1
+    container_name: coredns
+    command: ["-conf", "/etc/coredns/Corefile"]
+    volumes:
+      - ./dns/Corefile:/etc/coredns/Corefile:ro
+      - ./dns/test.local.zone:/etc/coredns/test.local.zone:ro
+    networks:
+      mongo_net:
+        ipv4_address: 172.28.0.53
+    ports:
+      - "1053:53/udp"
+
+  cfg1:
+    image: mongo:7
+    hostname: cfg1.test.local
+    command: ["mongod", "--configsvr", "--replSet", "cfgRS", "--bind_ip_all", "--port", "27019"]
+    dns: [172.28.0.53]
+    networks: { mongo_net: { ipv4_address: 172.28.0.21 } }
+
+  cfg2:
+    image: mongo:7
+    hostname: cfg2.test.local
+    command: ["mongod", "--configsvr", "--replSet", "cfgRS", "--bind_ip_all", "--port", "27019"]
+    dns: [172.28.0.53]
+    networks: { mongo_net: { ipv4_address: 172.28.0.22 } }
+
+  cfg3:
+    image: mongo:7
+    hostname: cfg3.test.local
+    command: ["mongod", "--configsvr", "--replSet", "cfgRS", "--bind_ip_all", "--port", "27019"]
+    dns: [172.28.0.53]
+    networks: { mongo_net: { ipv4_address: 172.28.0.23 } }
+
+  init-cfg:
+    image: mongo:7
+    depends_on: [cfg1, cfg2, cfg3]
+    volumes:
+      - ./mongo/init-cfg.sh:/init-cfg.sh:ro
+      - ./mongo/init-cfg.js:/init-cfg.js:ro
+    entrypoint: ["bash", "/init-cfg.sh"]
+    dns: [172.28.0.53]
+    networks: [mongo_net]
+
+  sh1a:
+    image: mongo:7
+    hostname: sh1a.test.local
+    command: ["mongod", "--shardsvr", "--replSet", "shardRS", "--bind_ip_all", "--port", "27018"]
+    dns: [172.28.0.53]
+    networks: { mongo_net: { ipv4_address: 172.28.0.31 } }
+
+  sh1b:
+    image: mongo:7
+    hostname: sh1b.test.local
+    command: ["mongod", "--shardsvr", "--replSet", "shardRS", "--bind_ip_all", "--port", "27018"]
+    dns: [172.28.0.53]
+    networks: { mongo_net: { ipv4_address: 172.28.0.32 } }
+
+  sh1c:
+    image: mongo:7
+    hostname: sh1c.test.local
+    command: ["mongod", "--shardsvr", "--replSet", "shardRS", "--bind_ip_all", "--port", "27018"]
+    dns: [172.28.0.53]
+    networks: { mongo_net: { ipv4_address: 172.28.0.33 } }
+
+  init-shard:
+    image: mongo:7
+    depends_on: [sh1a, sh1b, sh1c]
+    volumes:
+      - ./mongo/init-shard.sh:/init-shard.sh:ro
+      - ./mongo/init-shard.js:/init-shard.js:ro
+    entrypoint: ["bash", "/init-shard.sh"]
+    dns: [172.28.0.53]
+    networks: [mongo_net]
+
+  mongos1:
+    image: mongo:7
+    hostname: mongos1.test.local
+    depends_on: [init-cfg]
+    dns: [172.28.0.53]
+    networks:
+      mongo_net:
+        ipv4_address: 172.28.0.41
+    entrypoint: /bin/bash
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --host localhost --port 27017 --eval 'db.adminCommand({ping:1}).ok' | grep -q 1"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+      start_period: 5s
+    command:
+      - -lc
+      - |
+        set -euo pipefail
+        echo '[mongos1] waiting cfgRS PRIMARY...'
+        until mongosh --quiet --host cfg1.test.local --port 27019 --eval '
+          try {
+            st = rs.status();
+            prim = st.members.filter(m => m.stateStr == "PRIMARY");
+            prim.length == 1 ? 0 : 1
+          } catch(e) { 1 }
+        ' >/dev/null 2>&1; do
+          sleep 1
+        done
+
+        echo '[mongos1] starting mongos...'
+        exec mongos --bind_ip_all --port 27017 \
+          --configdb cfgRS/cfg1.test.local:27019,cfg2.test.local:27019,cfg3.test.local:27019
+
+  mongos2:
+    image: mongo:7
+    hostname: mongos2.test.local
+    depends_on: [init-cfg]
+    dns: [172.28.0.53]
+    networks:
+      mongo_net:
+        ipv4_address: 172.28.0.42
+    entrypoint: /bin/bash
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --host localhost --port 27017 --eval 'db.adminCommand({ping:1}).ok' | grep -q 1"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+      start_period: 5s
+    command:
+      - -lc
+      - |
+        set -euo pipefail
+        echo '[mongos2] waiting cfgRS PRIMARY...'
+        until mongosh --quiet --host cfg1.test.local --port 27019 --eval '
+          try {
+            st = rs.status();
+            prim = st.members.filter(m => m.stateStr == "PRIMARY");
+            prim.length == 1 ? 0 : 1
+          } catch(e) { 1 }
+        ' >/dev/null 2>&1; do
+          sleep 1
+        done
+
+        echo '[mongos2] starting mongos...'
+        exec mongos --bind_ip_all --port 27017 \
+          --configdb cfgRS/cfg1.test.local:27019,cfg2.test.local:27019,cfg3.test.local:27019
+
+  mongos3:
+    image: mongo:7
+    hostname: mongos3.test.local
+    depends_on: [init-cfg]
+    dns: [172.28.0.53]
+    networks:
+      mongo_net:
+        ipv4_address: 172.28.0.43
+    entrypoint: /bin/bash
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --host localhost --port 27017 --eval 'db.adminCommand({ping:1}).ok' | grep -q 1"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+      start_period: 5s
+    command:
+      - -lc
+      - |
+        set -euo pipefail
+        echo '[mongos3] waiting cfgRS PRIMARY...'
+        until mongosh --quiet --host cfg1.test.local --port 27019 --eval '
+          try {
+            st = rs.status();
+            prim = st.members.filter(m => m.stateStr == "PRIMARY");
+            prim.length == 1 ? 0 : 1
+          } catch(e) { 1 }
+        ' >/dev/null 2>&1; do
+          sleep 1
+        done
+
+        echo '[mongos3] starting mongos...'
+        exec mongos --bind_ip_all --port 27017 \
+          --configdb cfgRS/cfg1.test.local:27019,cfg2.test.local:27019,cfg3.test.local:27019
+
+  mongos4:
+    image: mongo:7
+    hostname: mongos4.test.local
+    depends_on: [init-cfg]
+    dns: [172.28.0.53]
+    networks:
+      mongo_net:
+        ipv4_address: 172.28.0.44
+    entrypoint: /bin/bash
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --host localhost --port 27017 --eval 'db.adminCommand({ping:1}).ok' | grep -q 1"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+      start_period: 5s
+    command:
+      - -lc
+      - |
+        set -euo pipefail
+        echo '[mongos4] waiting cfgRS PRIMARY...'
+        until mongosh --quiet --host cfg1.test.local --port 27019 --eval '
+          try {
+            st = rs.status();
+            prim = st.members.filter(m => m.stateStr == "PRIMARY");
+            prim.length == 1 ? 0 : 1
+          } catch(e) { 1 }
+        ' >/dev/null 2>&1; do
+          sleep 1
+        done
+
+        echo '[mongos4] starting mongos...'
+        exec mongos --bind_ip_all --port 27017 \
+          --configdb cfgRS/cfg1.test.local:27019,cfg2.test.local:27019,cfg3.test.local:27019
+
+  mongos5:
+    image: mongo:7
+    hostname: mongos5.test.local
+    depends_on: [init-cfg]
+    dns: [172.28.0.53]
+    networks:
+      mongo_net:
+        ipv4_address: 172.28.0.45
+    entrypoint: /bin/bash
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --host localhost --port 27017 --eval 'db.adminCommand({ping:1}).ok' | grep -q 1"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+      start_period: 5s
+    command:
+      - -lc
+      - |
+        set -euo pipefail
+        echo '[mongos5] waiting cfgRS PRIMARY...'
+        until mongosh --quiet --host cfg1.test.local --port 27019 --eval '
+          try {
+            st = rs.status();
+            prim = st.members.filter(m => m.stateStr == "PRIMARY");
+            prim.length == 1 ? 0 : 1
+          } catch(e) { 1 }
+        ' >/dev/null 2>&1; do
+          sleep 1
+        done
+
+        echo '[mongos5] starting mongos...'
+        exec mongos --bind_ip_all --port 27017 \
+          --configdb cfgRS/cfg1.test.local:27019,cfg2.test.local:27019,cfg3.test.local:27019
+
+  add-shard:
+    image: mongo:7
+    depends_on: [init-shard, mongos1]
+    volumes:
+      - ./mongo/add-shard.sh:/add-shard.sh:ro
+      - ./mongo/add-shard.js:/add-shard.js:ro
+    entrypoint: ["bash", "/add-shard.sh"]
+    dns: [172.28.0.53]
+    networks: [mongo_net]
+
+  app:
+    build: { context: ./app }
+    depends_on:
+      mongos1:
+        condition: service_healthy
+    dns: [172.28.0.53]
+    networks: [mongo_net]
+    environment:
+      MONGOID_ENV: "development"
+    command: ["bash", "-lc", "ruby reproduce.rb"]
+
+  patch:
+    build: { context: ./app }
+    depends_on:
+      mongos1:
+        condition: service_healthy
+    dns: [172.28.0.53]
+    networks: [mongo_net]
+    environment:
+      MONGOID_ENV: "development"
+    command: ["bash", "-lc", "ruby patch_reproduce.rb"]
+  debug:
+    build: ./app
+    image: mongoid-ruby-3596-app
+    depends_on:
+      - mongos1
+    dns:
+      - 172.28.0.53
+    networks:
+      mongo_net: {}
+    tty: true
+    stdin_open: true
+    command:
+      - bash
+      - -lc
+      - |
+        echo "[app] container ready for irb"
+        sleep infinity
+
+networks:
+  mongo_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24

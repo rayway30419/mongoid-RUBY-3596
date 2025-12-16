@@ -1,0 +1,11 @@
+development:
+  clients:
+    default:
+      uri: "mongodb+srv://mongo.test.local/?srvMaxHosts=3&tls=false"
+      options:
+        connect_timeout: 5
+        server_selection_timeout: 10
+        socket_timeout: 5
+
+  options:
+    raise_not_found_error: false

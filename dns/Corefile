@@ -1,0 +1,12 @@
+. {
+  errors
+  log
+  health
+  reload
+}
+
+test.local:53 {
+  file /etc/coredns/test.local.zone test.local
+  log
+  errors
+}
