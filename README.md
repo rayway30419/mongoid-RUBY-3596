@@ -1,21 +1,23 @@
-# mongo-srv-poc
+# mongoid-RUBY-3596
 
-Local PoC:
-- MongoDB replica set (5 nodes) via Docker Compose
-- CoreDNS providing SRV/TXT records for mongodb+srv
-- Ruby app connects via mongodb+srv and prints server list before/after SRV rescan
+This repository contains a **local, reproducible proof-of-concept** demonstrating
+an issue https://jira.mongodb.org/browse/RUBY-3596 with `srvMaxHosts` when using `mongodb+srv` in the MongoDB Ruby ecosystem.
 
-## Run
+## Overview
+
+The PoC environment consists of:
+
+- A MongoDB **sharded cluster** (mongos + shard replica set) running via Docker Compose
+- **CoreDNS** serving SRV and TXT records required for `mongodb+srv`
+- A Ruby application that connects using `mongodb+srv` and prints the server list:
+  - immediately after initialization
+  - after a subsequent SRV topology rescan
+
+Two variants are provided:
+- `app` – reproduces the issue
+- `patch` – demonstrates the expected behavior after applying a fix
+
+## How to Run
 
 ```bash
 docker compose up --build --remove-orphans
-```
-
-```
-❯ docker compose logs -f app patch
-
-app-1  | [Initialing] servers size=3)
-app-1  | [After 5s] servers size=5)
-patch-1  | [Initialing] servers size=3)
-patch-1  | [After 5s] servers size=3)
-```
