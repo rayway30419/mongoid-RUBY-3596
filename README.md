@@ -21,3 +21,16 @@ Two variants are provided:
 
 ```bash
 docker compose up --build --remove-orphans
+```
+
+## Reproduction
+```
+app-1    | [Initialing] servers (size=3)
+app-1    | [After 5s] servers (size=5)
+```
+
+## Expected Result
+```
+patch-1  | [Initialing] servers (size=3)
+patch-1  | [After 5s] servers (size=3)
+```

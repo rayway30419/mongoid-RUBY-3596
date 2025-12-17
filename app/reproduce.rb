@@ -11,8 +11,8 @@ Mongoid.load!("./config/mongoid.yml", env)
 
 client = Mongoid::Clients.default
 
-puts "[Initialing] servers size=#{client.cluster.servers.size})"
+puts "[Initialing] servers (size=#{client.cluster.servers.size})"
 sleep 5
-puts "[After 5s] servers size=#{client.cluster.servers.size})"
+puts "[After 5s] servers (size=#{client.cluster.servers.size})"
 
 client.close
